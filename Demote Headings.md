@@ -1,76 +1,59 @@
 <%*
-// Obsidian Templater Tool: Demote Headings
-// This tool converts selected headings to sub-headings (adds one more #)
-// Usage: Select text containing headings, then run this template
+const view = app.workspace.getActiveViewOfType(tp.obsidian.MarkdownView);
+if (!view) {
+    new Notice('No active Markdown editor found.');
+    return;
+}
 
-// Get the selected text
-const selectedText = tp.file.selection();
+const editor = view.editor;
+const selectedText = editor.getSelection();
 
-// Check if there's selected text
 if (!selectedText || selectedText.trim() === '') {
-    new Notice('No text selected. Please select text containing headings to demote.');
+    new Notice('No text selected. Please select text containing headings.');
     return;
 }
 
-// Function to demote headings
-function demoteHeadings(text) {
-    const lines = text.split('\n');
-    const processedLines = [];
-    let hasMaxLevelHeadings = false;
-    let hasChanges = false;
-    
-    for (let line of lines) {
-        // Check if line is a heading (starts with #)
-        const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
-        
-        if (headingMatch) {
-            const currentLevel = headingMatch[1].length;
-            const headingText = headingMatch[2];
-            
-            // Check if already at maximum level (6 #s)
-            if (currentLevel >= 6) {
-                hasMaxLevelHeadings = true;
-                processedLines.push(line); // Keep unchanged
-            } else {
-                // Add one more # to demote the heading
-                const newHeading = '#' + headingMatch[1] + ' ' + headingText;
-                processedLines.push(newHeading);
-                hasChanges = true;
-            }
-        } else {
-            // Not a heading, keep as is
+const lines = selectedText.split('\n');
+const processedLines = [];
+let demotedCount = 0;
+let hasMaxLevel = false;
+
+for (let line of lines) {
+    const match = line.match(/^(#{1,6})\s+(.*)$/);
+    if (match) {
+        const level = match[1].length;
+        if (level >= 6) {
+            hasMaxLevel = true;
             processedLines.push(line);
+        } else {
+            processedLines.push('#' + match[1] + ' ' + match[2]);
+            demotedCount++;
         }
+    } else {
+        processedLines.push(line);
     }
-    
-    return {
-        text: processedLines.join('\n'),
-        hasMaxLevelHeadings,
-        hasChanges
-    };
 }
 
-// Process the selected text
-const result = demoteHeadings(selectedText);
-
-// Show warnings if needed
-if (result.hasMaxLevelHeadings) {
-    new Notice('⚠️ Warning: Some headings are already at maximum level (######) and cannot be demoted further.', 5000);
-}
-
-if (!result.hasChanges && !result.hasMaxLevelHeadings) {
-    new Notice('No headings found in the selected text.', 3000);
+if (demotedCount === 0) {
+    new Notice(hasMaxLevel ? '⚠️ All headings are at maximum level (######).' : 'No headings found in selection.');
     return;
 }
 
-if (result.hasChanges) {
-    // Replace the selected text with the processed text
-    const editor = app.workspace.activeLeaf.view.editor;
-    editor.replaceSelection(result.text);
-    
-    const changeCount = (result.text.match(/^#{2,6}\s+/gm) || []).length - (selectedText.match(/^#{2,6}\s+/gm) || []).length;
-    new Notice(`✅ Successfully demoted ${changeCount} headings!`, 3000);
-} else {
-    new Notice('No changes made - all headings were already at maximum level.', 3000);
-}
+const from = editor.getCursor('from');
+const newText = processedLines.join('\n');
+
+editor.replaceSelection(newText);
+
+const newLines = newText.split('\n');
+const to = {
+    line: from.line + newLines.length - 1,
+    ch: newLines.length === 1 ? from.ch + newLines[0].length : newLines[newLines.length - 1].length
+};
+
+setTimeout(() => {
+    editor.setSelection(from, to);
+    editor.focus();
+}, 50);
+
+new Notice(`✅ Successfully demoted ${demotedCount} heading${demotedCount > 1 ? 's' : ''}!`, 3000);
 %>
